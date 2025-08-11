@@ -9,29 +9,32 @@ import {
   HttpException,
   Logger,
   Header,
+  Param,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
-import { SimpleFederationMockData } from '../mock-data/simple-federation-entities';
+import { ApiTags, ApiOperation, ApiResponse, ApiQuery, ApiParam } from '@nestjs/swagger';
 import {
   RecognitionRequestDto,
   RecognitionResponseDto,
 } from '../../trust-registry/dto/recognition.dto';
+import { FederationJwtService } from '../services/federation-jwt.service';
+import { TrustChainService } from '../services/trust-chain.service';
 
 @ApiTags('OpenID Federation 1.0 - Minimal')
-@Controller('federation')
+@Controller()
 export class MinimalFederationController {
   private readonly logger = new Logger(MinimalFederationController.name);
+  private readonly baseUrl = process.env.BASE_URL || 'https://trs.example.org';
 
-  constructor() {
-    // Initialize mock data
-    SimpleFederationMockData.initialize();
-  }
+  constructor(
+    private readonly federationJwtService: FederationJwtService,
+    private readonly trustChainService: TrustChainService,
+  ) {}
 
   /**
    * Entity Configuration Endpoint
-   * GET /.well-known/openid_federation
+   * GET /.well-known/openid-federation
    */
-  @Get('.well-known/openid_federation')
+  @Get('.well-known/openid-federation')
   @HttpCode(HttpStatus.OK)
   @Header('Content-Type', 'application/entity-statement+jwt')
   @ApiOperation({
@@ -50,21 +53,153 @@ export class MinimalFederationController {
   async getEntityConfiguration(
     @Query('iss') entityId?: string,
   ): Promise<string> {
-    const targetEntityId = entityId || 'https://federation.example.org';
+    const targetEntityId = entityId || this.baseUrl;
     this.logger.log(`Entity configuration requested for: ${targetEntityId}`);
 
-    const entity = SimpleFederationMockData.getEntity(targetEntityId);
-    if (!entity) {
-      throw new HttpException('Entity not found', HttpStatus.NOT_FOUND);
+    try {
+      // Create real JWT entity configuration
+      const entityConfig = await this.federationJwtService.createEntityConfiguration(
+        targetEntityId,
+        ['https://trust-anchor.example.org'], // Authority hints
+      );
+      return entityConfig;
+    } catch (error) {
+      this.logger.error('Failed to create entity configuration:', error);
+      throw new HttpException(
+        'Failed to create entity configuration',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
+  }
 
-    return entity.entity_statement;
+  /**
+   * Fetch Entity Statement
+   * GET /federation/fetch
+   */
+  @Get('federation/fetch')
+  @HttpCode(HttpStatus.OK)
+  @Header('Content-Type', 'application/entity-statement+jwt')
+  @ApiOperation({
+    summary: 'Fetch Entity Statement',
+    description: 'Fetch entity statement about a subject from this authority',
+  })
+  @ApiQuery({
+    name: 'iss',
+    required: false,
+    description: 'Issuer (this authority)',
+  })
+  @ApiQuery({
+    name: 'sub',
+    required: true,
+    description: 'Subject entity identifier',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Entity Statement JWT',
+  })
+  async fetchEntityStatement(
+    @Query('iss') issuer: string,
+    @Query('sub') subject: string,
+  ): Promise<string> {
+    const iss = issuer || this.baseUrl;
+    this.logger.log(`Entity statement requested: ${iss} about ${subject}`);
+
+    try {
+      // Check if we know about this subject
+      const trustStatus = await this.trustChainService.verifyEntityTrust(subject);
+      
+      if (!trustStatus.isTrusted) {
+        throw new HttpException('Subject entity not found', HttpStatus.NOT_FOUND);
+      }
+
+      // Create entity statement about the subject
+      const entityStatement = await this.federationJwtService.createEntityStatement(
+        iss,
+        subject,
+        [], // Trust marks
+        trustStatus.metadata,
+      );
+      
+      return entityStatement;
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      this.logger.error('Failed to create entity statement:', error);
+      throw new HttpException(
+        'Failed to create entity statement',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  /**
+   * List Subordinate Entities
+   * GET /federation/list
+   */
+  @Get('federation/list')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'List Subordinate Entities',
+    description: 'List all entities subordinate to this authority',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'List of subordinate entities',
+  })
+  async listSubordinates(): Promise<any> {
+    this.logger.log('Subordinate entities list requested');
+    
+    const entities = this.trustChainService.getAllTrustedEntities();
+    return {
+      entities: entities.map(e => ({
+        entity_id: e.entityId,
+        entity_type: e.metadata.entity_type || 'unknown',
+        organization_name: e.metadata.organization_name,
+      })),
+      total: entities.length,
+      timestamp: new Date().toISOString(),
+    };
+  }
+
+  /**
+   * Trust Chain Status
+   * GET /federation/trust-chain/:entity_id
+   */
+  @Get('federation/trust-chain/:entity_id')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Get Trust Chain Status',
+    description: 'Get trust chain resolution status for an entity',
+  })
+  @ApiParam({
+    name: 'entity_id',
+    description: 'Entity identifier (URL encoded)',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Trust chain status',
+  })
+  async getTrustChainStatus(
+    @Param('entity_id') entityId: string,
+  ): Promise<any> {
+    const decodedEntityId = decodeURIComponent(entityId);
+    this.logger.log(`Trust chain status requested for: ${decodedEntityId}`);
+    
+    const trustStatus = await this.trustChainService.verifyEntityTrust(decodedEntityId);
+    return {
+      entity_id: decodedEntityId,
+      is_trusted: trustStatus.isTrusted,
+      trust_chains: trustStatus.trustChains,
+      metadata: trustStatus.metadata,
+      timestamp: new Date().toISOString(),
+    };
   }
 
   /**
    * Federation Statistics
    */
-  @Get('stats')
+  @Get('federation/stats')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Federation Statistics',
@@ -76,13 +211,18 @@ export class MinimalFederationController {
   })
   async getFederationStats(): Promise<any> {
     this.logger.log('Federation statistics requested');
-    return SimpleFederationMockData.getFederationStats();
+    const entities = this.trustChainService.getAllTrustedEntities();
+    return {
+      total_entities: entities.length,
+      trust_anchors: this.trustChainService.getTrustAnchors().length,
+      timestamp: new Date().toISOString(),
+    };
   }
 
   /**
    * List All Entities
    */
-  @Get('entities')
+  @Get('federation/entities')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'List All Entities',
@@ -94,13 +234,13 @@ export class MinimalFederationController {
   })
   async getAllEntities(): Promise<any> {
     this.logger.log('All entities requested');
-    return SimpleFederationMockData.getAllEntities();
+    return this.trustChainService.getAllTrustedEntities();
   }
 
   /**
    * TRQP Recognition (for backward compatibility)
    */
-  @Post('recognition')
+  @Post('federation/recognition')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Entity Recognition (TRQP)',
@@ -116,9 +256,9 @@ export class MinimalFederationController {
   ): Promise<RecognitionResponseDto> {
     this.logger.log(`Recognition requested: ${JSON.stringify(request)}`);
 
-    // Simple recognition logic
-    const entity = SimpleFederationMockData.getEntity(request.entity_id);
-    const recognized = entity !== undefined;
+    // Use trust chain service for recognition
+    const trustStatus = await this.trustChainService.verifyEntityTrust(request.entity_id);
+    const recognized = trustStatus.isTrusted;
 
     return {
       entity_id: request.entity_id,
@@ -132,7 +272,7 @@ export class MinimalFederationController {
   /**
    * Health Check
    */
-  @Get('health')
+  @Get('federation/health')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Health Check',
@@ -147,7 +287,7 @@ export class MinimalFederationController {
       status: 'healthy',
       timestamp: new Date().toISOString(),
       federation_standard: 'OpenID Federation 1.0',
-      entities_loaded: SimpleFederationMockData.getAllEntities().length,
+      entities_loaded: this.trustChainService.getAllTrustedEntities().length,
     };
   }
 }
