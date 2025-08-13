@@ -106,12 +106,15 @@ export class MinimalFederationController {
         throw new HttpException('Subject entity not found', HttpStatus.NOT_FOUND);
       }
 
+      // Format metadata according to OpenID Federation spec
+      const formattedMetadata = this.formatEntityMetadata(registeredEntity.metadata);
+      
       // Create entity statement about the subject
       const entityStatement = await this.federationJwtService.createEntityStatement(
         iss,
         subject,
         [], // Trust marks
-        registeredEntity.metadata,
+        formattedMetadata,
       );
       
       return entityStatement;
@@ -181,5 +184,43 @@ export class MinimalFederationController {
       role: 'Registry/Issuer',
       registered_entities: this.entityRegistryService.getAllRegisteredEntities().length,
     };
+  }
+
+  /**
+   * Format entity metadata according to OpenID Federation specification
+   */
+  private formatEntityMetadata(metadata: any): any {
+    const entityType = metadata.entity_type;
+    
+    // Create properly structured metadata based on entity type
+    const formattedMetadata: any = {};
+    
+    if (entityType === 'openid_relying_party') {
+      formattedMetadata.openid_relying_party = {
+        organization_name: metadata.organization_name,
+        client_registration_types: ['automatic'],
+        redirect_uris: metadata.redirect_uris || ['https://rp.example.org/callback'],
+      };
+    } else if (entityType === 'openid_provider') {
+      formattedMetadata.openid_provider = {
+        issuer: metadata.issuer || 'https://op.example.org',
+        authorization_endpoint: metadata.authorization_endpoint || 'https://op.example.org/authorize',
+        token_endpoint: metadata.token_endpoint || 'https://op.example.org/token',
+        jwks_uri: metadata.jwks_uri || 'https://op.example.org/jwks',
+        response_types_supported: metadata.response_types_supported || ['code'],
+        subject_types_supported: metadata.subject_types_supported || ['public'],
+        id_token_signing_alg_values_supported: metadata.id_token_signing_alg_values_supported || ['ES256'],
+        client_registration_types_supported: ['automatic'],
+        organization_name: metadata.organization_name,
+      };
+    } else if (entityType === 'federation_entity') {
+      formattedMetadata.federation_entity = {
+        organization_name: metadata.organization_name,
+        contacts: metadata.contacts || ['admin@example.org'],
+        homepage_uri: metadata.homepage_uri || 'https://example.org',
+      };
+    }
+    
+    return formattedMetadata;
   }
 }
