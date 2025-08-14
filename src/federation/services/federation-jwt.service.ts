@@ -6,13 +6,18 @@ import {
   VerifyCallback,
   createEntityStatement,
 } from '@openid-federation/core';
-import { createPrivateKey, createPublicKey, createSign, createVerify } from 'node:crypto';
+import {
+  createPrivateKey,
+  createPublicKey,
+  createSign,
+  createVerify,
+} from 'node:crypto';
 import * as jwt from 'jsonwebtoken';
 
 @Injectable()
 export class FederationJwtService {
   private readonly logger = new Logger(FederationJwtService.name);
-  
+
   // Test keys for development - In production, these should come from secure storage
   private readonly testKeys = {
     privateJwk: {
@@ -67,7 +72,11 @@ export class FederationJwtService {
   /**
    * Verify callback for OpenID Federation library
    */
-  private verifyJwtCallback: VerifyCallback = async ({ signature, data, jwk }) => {
+  private verifyJwtCallback: VerifyCallback = async ({
+    signature,
+    data,
+    jwk,
+  }) => {
     try {
       const publicKey = createPublicKey({
         key: jwk,
@@ -94,7 +103,10 @@ export class FederationJwtService {
   /**
    * Create Entity Configuration for this TRS
    */
-  async createEntityConfiguration(entityId: string, authorityHints?: string[]): Promise<string> {
+  async createEntityConfiguration(
+    entityId: string,
+    authorityHints?: string[],
+  ): Promise<string> {
     this.logger.log(`Creating entity configuration for: ${entityId}`);
 
     const now = Math.floor(Date.now() / 1000);
@@ -114,13 +126,14 @@ export class FederationJwtService {
           authority_hints: authorityHints || [],
           metadata: {
             federation_entity: {
-              organization_name: 'Test Trust Registry Service',
-              contacts: ['admin@trs.example.org'],
+              organization_name: 'hTrust - Trust Registry Service',
+              contacts: ['admin@htrust.example.org'],
               homepage_uri: entityId,
+              federation_fetch_endpoint: `${entityId}/federation/fetch`,
+              federation_list_endpoint: `${entityId}/federation/list`,
+              federation_trust_mark_status_endpoint: `${entityId}/federation/trust_mark_status`,
             },
-            // Custom metadata for TRS can be added here
-            // The library doesn't have trust_registry in its types yet
-          },
+          } as any, // Custom metadata extensions require type assertion
         },
         header: {
           kid: this.testKeys.privateJwk.kid,
@@ -151,20 +164,35 @@ export class FederationJwtService {
     const now = Math.floor(Date.now() / 1000);
     const exp = now + 7 * 24 * 60 * 60; // 7 days
 
+    // Try with minimal claims first
+    const claims: any = {
+      iss: issuer,
+      sub: subject,
+      exp,
+      iat: now,
+      // jwks is always required for entity statements
+      jwks: { keys: [this.testKeys.publicJwk] },
+    };
+
+    // Add optional fields one by one to identify the problem
+    if (trustMarks && trustMarks.length > 0) {
+      claims.trust_marks = trustMarks;
+    }
+
+    if (metadata && Object.keys(metadata).length > 0) {
+      claims.metadata = metadata;
+    }
+
+    // Add source_endpoint last
+    claims.source_endpoint = `${issuer}/.well-known/openid-federation`;
+
     try {
+
+      // createEntityStatement requires jwk parameter (different from createEntityConfiguration)
       const entityStatement = await createEntityStatement({
         signJwtCallback: this.signJwtCallback,
         jwk: this.testKeys.privateJwk,
-        claims: {
-          iss: issuer,
-          sub: subject,
-          exp,
-          iat: now,
-          jwks: subject === issuer ? { keys: [this.testKeys.publicJwk] } : undefined,
-          trust_marks: trustMarks,
-          metadata: metadata || {},
-          source_endpoint: `${issuer}/.well-known/openid-federation`,
-        },
+        claims,
         header: {
           kid: this.testKeys.privateJwk.kid,
           typ: 'entity-statement+jwt',
@@ -187,7 +215,7 @@ export class FederationJwtService {
     try {
       // First decode to get the public key
       const decoded = jwt.decode(jwtString, { complete: true }) as any;
-      
+
       if (!decoded || !decoded.payload) {
         throw new Error('Invalid JWT format');
       }
@@ -196,7 +224,9 @@ export class FederationJwtService {
       let verificationKey;
       if (decoded.payload.iss === decoded.payload.sub && decoded.payload.jwks) {
         const kid = decoded.header.kid;
-        verificationKey = decoded.payload.jwks.keys.find((k: any) => k.kid === kid);
+        verificationKey = decoded.payload.jwks.keys.find(
+          (k: any) => k.kid === kid,
+        );
       } else {
         // For other statements, would need to fetch issuer's keys
         verificationKey = this.testKeys.publicJwk;
@@ -236,7 +266,10 @@ export class FederationJwtService {
       this.logger.log(`Fetched entity configuration for: ${entityId}`);
       return config;
     } catch (error) {
-      this.logger.error(`Failed to fetch entity configuration for ${entityId}:`, error);
+      this.logger.error(
+        `Failed to fetch entity configuration for ${entityId}:`,
+        error,
+      );
       throw error;
     }
   }

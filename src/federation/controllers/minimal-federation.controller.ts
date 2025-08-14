@@ -1,34 +1,31 @@
 import {
   Controller,
   Get,
-  Post,
-  Body,
   Query,
   HttpStatus,
   HttpCode,
   HttpException,
   Logger,
   Header,
-  Param,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiQuery, ApiParam } from '@nestjs/swagger';
-import {
-  RecognitionRequestDto,
-  RecognitionResponseDto,
-} from '../../trust-registry/dto/recognition.dto';
+import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
+
 import { FederationJwtService } from '../services/federation-jwt.service';
-import { TrustChainService } from '../services/trust-chain.service';
+import { EntityRegistryService } from '../services/entity-registry.service';
 
 @ApiTags('OpenID Federation 1.0 - Minimal')
 @Controller()
 export class MinimalFederationController {
   private readonly logger = new Logger(MinimalFederationController.name);
-  private readonly baseUrl = process.env.BASE_URL || 'https://trs.example.org';
 
   constructor(
     private readonly federationJwtService: FederationJwtService,
-    private readonly trustChainService: TrustChainService,
+    private readonly entityRegistryService: EntityRegistryService,
   ) {}
+
+  private get baseUrl(): string {
+    return 'http://localhost:3000';
+  }
 
   /**
    * Entity Configuration Endpoint
@@ -57,11 +54,11 @@ export class MinimalFederationController {
     this.logger.log(`Entity configuration requested for: ${targetEntityId}`);
 
     try {
-      // Create real JWT entity configuration
-      const entityConfig = await this.federationJwtService.createEntityConfiguration(
-        targetEntityId,
-        ['https://trust-anchor.example.org'], // Authority hints
-      );
+      const entityConfig =
+        await this.federationJwtService.createEntityConfiguration(
+          targetEntityId,
+          [],
+        );
       return entityConfig;
     } catch (error) {
       this.logger.error('Failed to create entity configuration:', error);
@@ -105,21 +102,31 @@ export class MinimalFederationController {
     this.logger.log(`Entity statement requested: ${iss} about ${subject}`);
 
     try {
-      // Check if we know about this subject
-      const trustStatus = await this.trustChainService.verifyEntityTrust(subject);
-      
-      if (!trustStatus.isTrusted) {
-        throw new HttpException('Subject entity not found', HttpStatus.NOT_FOUND);
+      // Check if we have registered this subject
+      const registeredEntity =
+        this.entityRegistryService.getRegisteredEntity(subject);
+
+      if (!registeredEntity || registeredEntity.status !== 'active') {
+        throw new HttpException(
+          'Subject entity not found',
+          HttpStatus.NOT_FOUND,
+        );
       }
 
-      // Create entity statement about the subject
-      const entityStatement = await this.federationJwtService.createEntityStatement(
-        iss,
-        subject,
-        [], // Trust marks
-        trustStatus.metadata,
+      // Format metadata according to OpenID Federation spec
+      const formattedMetadata = this.formatEntityMetadata(
+        registeredEntity.metadata,
       );
-      
+
+      // Create entity statement about the subject (Trust Anchor issuing ES)
+      const entityStatement =
+        await this.federationJwtService.createEntityStatement(
+          iss,
+          subject,
+          registeredEntity.trustMarks || [], // Trust marks from registry
+          formattedMetadata,
+        );
+
       return entityStatement;
     } catch (error) {
       if (error instanceof HttpException) {
@@ -149,123 +156,20 @@ export class MinimalFederationController {
   })
   async listSubordinates(): Promise<any> {
     this.logger.log('Subordinate entities list requested');
-    
-    const entities = this.trustChainService.getAllTrustedEntities();
+
+    const entities = this.entityRegistryService.getAllRegisteredEntities();
     return {
-      entities: entities.map(e => ({
-        entity_id: e.entityId,
-        entity_type: e.metadata.entity_type || 'unknown',
-        organization_name: e.metadata.organization_name,
-      })),
+      entities: entities
+        .filter((e) => e.status === 'active')
+        .map((e) => ({
+          entity_id: e.entityId,
+          entity_type: e.metadata.entity_type || 'unknown',
+          organization_name: e.metadata.organization_name,
+          status: e.status,
+          registered_at: e.registeredAt.toISOString(),
+        })),
       total: entities.length,
       timestamp: new Date().toISOString(),
-    };
-  }
-
-  /**
-   * Trust Chain Status
-   * GET /federation/trust-chain/:entity_id
-   */
-  @Get('federation/trust-chain/:entity_id')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({
-    summary: 'Get Trust Chain Status',
-    description: 'Get trust chain resolution status for an entity',
-  })
-  @ApiParam({
-    name: 'entity_id',
-    description: 'Entity identifier (URL encoded)',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Trust chain status',
-  })
-  async getTrustChainStatus(
-    @Param('entity_id') entityId: string,
-  ): Promise<any> {
-    const decodedEntityId = decodeURIComponent(entityId);
-    this.logger.log(`Trust chain status requested for: ${decodedEntityId}`);
-    
-    const trustStatus = await this.trustChainService.verifyEntityTrust(decodedEntityId);
-    return {
-      entity_id: decodedEntityId,
-      is_trusted: trustStatus.isTrusted,
-      trust_chains: trustStatus.trustChains,
-      metadata: trustStatus.metadata,
-      timestamp: new Date().toISOString(),
-    };
-  }
-
-  /**
-   * Federation Statistics
-   */
-  @Get('federation/stats')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({
-    summary: 'Federation Statistics',
-    description: 'Get federation statistics',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Federation statistics',
-  })
-  async getFederationStats(): Promise<any> {
-    this.logger.log('Federation statistics requested');
-    const entities = this.trustChainService.getAllTrustedEntities();
-    return {
-      total_entities: entities.length,
-      trust_anchors: this.trustChainService.getTrustAnchors().length,
-      timestamp: new Date().toISOString(),
-    };
-  }
-
-  /**
-   * List All Entities
-   */
-  @Get('federation/entities')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({
-    summary: 'List All Entities',
-    description: 'List all federation entities',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'List of entities',
-  })
-  async getAllEntities(): Promise<any> {
-    this.logger.log('All entities requested');
-    return this.trustChainService.getAllTrustedEntities();
-  }
-
-  /**
-   * TRQP Recognition (for backward compatibility)
-   */
-  @Post('federation/recognition')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({
-    summary: 'Entity Recognition (TRQP)',
-    description: 'Check if entity is recognized by authority',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Recognition result',
-    type: RecognitionResponseDto,
-  })
-  async recognition(
-    @Body() request: RecognitionRequestDto,
-  ): Promise<RecognitionResponseDto> {
-    this.logger.log(`Recognition requested: ${JSON.stringify(request)}`);
-
-    // Use trust chain service for recognition
-    const trustStatus = await this.trustChainService.verifyEntityTrust(request.entity_id);
-    const recognized = trustStatus.isTrusted;
-
-    return {
-      entity_id: request.entity_id,
-      authority_id: request.authority_id,
-      assertion_id: request.assertion_id,
-      recognized,
-      message: recognized ? 'Entity is recognized' : 'Entity not found',
     };
   }
 
@@ -287,7 +191,52 @@ export class MinimalFederationController {
       status: 'healthy',
       timestamp: new Date().toISOString(),
       federation_standard: 'OpenID Federation 1.0',
-      entities_loaded: this.trustChainService.getAllTrustedEntities().length,
+      role: 'Registry/Issuer',
+      registered_entities:
+        this.entityRegistryService.getAllRegisteredEntities().length,
     };
+  }
+
+  /**
+   * Format entity metadata according to OpenID Federation specification
+   */
+  private formatEntityMetadata(metadata: any): any {
+    const entityType = metadata.entity_type;
+
+    // Create properly structured metadata based on entity type
+    const formattedMetadata: any = {};
+
+    if (entityType === 'openid_relying_party') {
+      formattedMetadata.openid_relying_party = {
+        organization_name: metadata.organization_name,
+        client_registration_types: ['automatic'],
+        redirect_uris: metadata.redirect_uris || [
+          'https://rp.example.org/callback',
+        ],
+      };
+    } else if (entityType === 'openid_provider') {
+      formattedMetadata.openid_provider = {
+        issuer: metadata.issuer || 'https://op.example.org',
+        authorization_endpoint:
+          metadata.authorization_endpoint || 'https://op.example.org/authorize',
+        token_endpoint:
+          metadata.token_endpoint || 'https://op.example.org/token',
+        jwks_uri: metadata.jwks_uri || 'https://op.example.org/jwks',
+        response_types_supported: metadata.response_types_supported || ['code'],
+        subject_types_supported: metadata.subject_types_supported || ['public'],
+        id_token_signing_alg_values_supported:
+          metadata.id_token_signing_alg_values_supported || ['ES256'],
+        client_registration_types_supported: ['automatic'],
+        organization_name: metadata.organization_name,
+      };
+    } else if (entityType === 'federation_entity') {
+      formattedMetadata.federation_entity = {
+        organization_name: metadata.organization_name,
+        contacts: metadata.contacts || ['admin@example.org'],
+        homepage_uri: metadata.homepage_uri || 'https://example.org',
+      };
+    }
+
+    return formattedMetadata;
   }
 }
