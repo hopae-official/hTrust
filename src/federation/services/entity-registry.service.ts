@@ -6,6 +6,8 @@ export interface RegisteredEntity {
   status: 'active' | 'suspended' | 'revoked';
   registeredAt: Date;
   updatedAt: Date;
+  trustMarks?: string[];
+  authorityHints?: string[];
 }
 
 @Injectable()
@@ -25,6 +27,8 @@ export class EntityRegistryService {
         status: 'active',
         registeredAt: new Date('2024-01-01'),
         updatedAt: new Date('2024-01-01'),
+        trustMarks: ['verified_rp'],
+        authorityHints: ['http://localhost:3000'], // hTrust as Trust Anchor
       },
     ],
     [
@@ -38,6 +42,8 @@ export class EntityRegistryService {
         status: 'active',
         registeredAt: new Date('2024-01-01'),
         updatedAt: new Date('2024-01-01'),
+        trustMarks: ['verified_issuer', 'kyc_provider'],
+        authorityHints: ['http://localhost:3000'], // hTrust as Trust Anchor
       },
     ],
     [

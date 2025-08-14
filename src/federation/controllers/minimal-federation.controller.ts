@@ -17,12 +17,15 @@ import { EntityRegistryService } from '../services/entity-registry.service';
 @Controller()
 export class MinimalFederationController {
   private readonly logger = new Logger(MinimalFederationController.name);
-  private readonly baseUrl = process.env.BASE_URL || 'https://trs.example.org';
 
   constructor(
     private readonly federationJwtService: FederationJwtService,
     private readonly entityRegistryService: EntityRegistryService,
   ) {}
+
+  private get baseUrl(): string {
+    return 'http://localhost:3000';
+  }
 
   /**
    * Entity Configuration Endpoint
@@ -51,11 +54,11 @@ export class MinimalFederationController {
     this.logger.log(`Entity configuration requested for: ${targetEntityId}`);
 
     try {
-      // Create real JWT entity configuration
-      const entityConfig = await this.federationJwtService.createEntityConfiguration(
-        targetEntityId,
-        ['https://trust-anchor.example.org'], // Authority hints
-      );
+      const entityConfig =
+        await this.federationJwtService.createEntityConfiguration(
+          targetEntityId,
+          [],
+        );
       return entityConfig;
     } catch (error) {
       this.logger.error('Failed to create entity configuration:', error);
@@ -100,23 +103,30 @@ export class MinimalFederationController {
 
     try {
       // Check if we have registered this subject
-      const registeredEntity = this.entityRegistryService.getRegisteredEntity(subject);
-      
+      const registeredEntity =
+        this.entityRegistryService.getRegisteredEntity(subject);
+
       if (!registeredEntity || registeredEntity.status !== 'active') {
-        throw new HttpException('Subject entity not found', HttpStatus.NOT_FOUND);
+        throw new HttpException(
+          'Subject entity not found',
+          HttpStatus.NOT_FOUND,
+        );
       }
 
       // Format metadata according to OpenID Federation spec
-      const formattedMetadata = this.formatEntityMetadata(registeredEntity.metadata);
-      
-      // Create entity statement about the subject
-      const entityStatement = await this.federationJwtService.createEntityStatement(
-        iss,
-        subject,
-        [], // Trust marks
-        formattedMetadata,
+      const formattedMetadata = this.formatEntityMetadata(
+        registeredEntity.metadata,
       );
-      
+
+      // Create entity statement about the subject (Trust Anchor issuing ES)
+      const entityStatement =
+        await this.federationJwtService.createEntityStatement(
+          iss,
+          subject,
+          registeredEntity.trustMarks || [], // Trust marks from registry
+          formattedMetadata,
+        );
+
       return entityStatement;
     } catch (error) {
       if (error instanceof HttpException) {
@@ -146,7 +156,7 @@ export class MinimalFederationController {
   })
   async listSubordinates(): Promise<any> {
     this.logger.log('Subordinate entities list requested');
-    
+
     const entities = this.entityRegistryService.getAllRegisteredEntities();
     return {
       entities: entities
@@ -182,7 +192,8 @@ export class MinimalFederationController {
       timestamp: new Date().toISOString(),
       federation_standard: 'OpenID Federation 1.0',
       role: 'Registry/Issuer',
-      registered_entities: this.entityRegistryService.getAllRegisteredEntities().length,
+      registered_entities:
+        this.entityRegistryService.getAllRegisteredEntities().length,
     };
   }
 
@@ -191,25 +202,30 @@ export class MinimalFederationController {
    */
   private formatEntityMetadata(metadata: any): any {
     const entityType = metadata.entity_type;
-    
+
     // Create properly structured metadata based on entity type
     const formattedMetadata: any = {};
-    
+
     if (entityType === 'openid_relying_party') {
       formattedMetadata.openid_relying_party = {
         organization_name: metadata.organization_name,
         client_registration_types: ['automatic'],
-        redirect_uris: metadata.redirect_uris || ['https://rp.example.org/callback'],
+        redirect_uris: metadata.redirect_uris || [
+          'https://rp.example.org/callback',
+        ],
       };
     } else if (entityType === 'openid_provider') {
       formattedMetadata.openid_provider = {
         issuer: metadata.issuer || 'https://op.example.org',
-        authorization_endpoint: metadata.authorization_endpoint || 'https://op.example.org/authorize',
-        token_endpoint: metadata.token_endpoint || 'https://op.example.org/token',
+        authorization_endpoint:
+          metadata.authorization_endpoint || 'https://op.example.org/authorize',
+        token_endpoint:
+          metadata.token_endpoint || 'https://op.example.org/token',
         jwks_uri: metadata.jwks_uri || 'https://op.example.org/jwks',
         response_types_supported: metadata.response_types_supported || ['code'],
         subject_types_supported: metadata.subject_types_supported || ['public'],
-        id_token_signing_alg_values_supported: metadata.id_token_signing_alg_values_supported || ['ES256'],
+        id_token_signing_alg_values_supported:
+          metadata.id_token_signing_alg_values_supported || ['ES256'],
         client_registration_types_supported: ['automatic'],
         organization_name: metadata.organization_name,
       };
@@ -220,7 +236,7 @@ export class MinimalFederationController {
         homepage_uri: metadata.homepage_uri || 'https://example.org',
       };
     }
-    
+
     return formattedMetadata;
   }
 }

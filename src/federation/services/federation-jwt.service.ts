@@ -126,13 +126,14 @@ export class FederationJwtService {
           authority_hints: authorityHints || [],
           metadata: {
             federation_entity: {
-              organization_name: 'Test Trust Registry Service',
-              contacts: ['admin@trs.example.org'],
+              organization_name: 'hTrust - Trust Registry Service',
+              contacts: ['admin@htrust.example.org'],
               homepage_uri: entityId,
+              federation_fetch_endpoint: `${entityId}/federation/fetch`,
+              federation_list_endpoint: `${entityId}/federation/list`,
+              federation_trust_mark_status_endpoint: `${entityId}/federation/trust_mark_status`,
             },
-            // Custom metadata for TRS can be added here
-            // The library doesn't have trust_registry in its types yet
-          },
+          } as any, // Custom metadata extensions require type assertion
         },
         header: {
           kid: this.testKeys.privateJwk.kid,
