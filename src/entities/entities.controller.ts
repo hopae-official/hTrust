@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Put,
   Delete,
   Body,
   Param,
@@ -19,6 +20,7 @@ import {
 } from '@nestjs/swagger';
 import { EntitiesService } from './entities.service';
 import { CreateEntityDto } from './dto/create-entity.dto';
+import { UpdateEntityDto } from './dto/update-entity.dto';
 import { TrustEntityStatus, TrustEntityType } from './types';
 
 @ApiTags('Entity Management')
@@ -103,6 +105,33 @@ export class EntitiesController {
   })
   async findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.entitiesService.findOne(id);
+  }
+
+  @Put(':id')
+  @ApiOperation({
+    summary: 'Update entity',
+    description: 'Update entity information',
+  })
+  @ApiParam({ name: 'id', description: 'Entity UUID' })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Entity updated successfully',
+  })
+  @ApiResponse({
+    status: HttpStatus.NOT_FOUND,
+    description: 'Entity not found',
+  })
+  async update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(ValidationPipe) dto: UpdateEntityDto,
+  ) {
+    const entity = await this.entitiesService.update(id, dto);
+    return {
+      entity_id: entity.entityId,
+      status: entity.status,
+      updated_at: entity.updatedAt,
+      tl_version: entity.tlVersion,
+    };
   }
 
   @Delete(':id')
