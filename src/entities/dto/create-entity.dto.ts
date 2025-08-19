@@ -38,13 +38,15 @@ export class CreateEntityDto {
 
   @ApiPropertyOptional({
     description: 'JWKS JSON directly',
-    example: { 
-      keys: [{
-        kty: 'RSA',
-        kid: 'test-key-1',
-        use: 'sig',
-        alg: 'RS256'
-      }]
+    example: {
+      keys: [
+        {
+          kty: 'RSA',
+          kid: 'test-key-1',
+          use: 'sig',
+          alg: 'RS256',
+        },
+      ],
     },
   })
   @IsOptional()
@@ -55,7 +57,8 @@ export class CreateEntityDto {
   @ApiPropertyOptional({
     description: 'API endpoints',
     example: {
-      'openid-configuration': 'https://example.com/.well-known/openid-configuration',
+      'openid-configuration':
+        'https://example.com/.well-known/openid-configuration',
     },
   })
   @IsOptional()
@@ -64,9 +67,9 @@ export class CreateEntityDto {
 
   @ApiPropertyOptional({
     description: 'Trust policy',
-    example: { 
+    example: {
       trust_framework: 'openid-federation',
-      sandbox_mode: true 
+      sandbox_mode: true,
     },
   })
   @IsOptional()

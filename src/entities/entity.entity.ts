@@ -6,19 +6,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
-
-export enum TrustEntityType {
-  WALLET_PROVIDER = 'wallet_provider',
-  PID_PROVIDER = 'pid_provider',
-  ATTESTATION_PROVIDER = 'attestation_provider',
-  RP = 'rp',
-  REGISTRAR = 'registrar',
-}
-
-export enum TrustEntityStatus {
-  ACTIVE = 'active',
-  REVOKED = 'revoked',
-}
+import { TrustEntityType, TrustEntityStatus } from './types';
 
 @Entity('trust_entities')
 export class TrustEntity {
