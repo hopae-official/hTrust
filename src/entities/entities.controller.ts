@@ -19,7 +19,7 @@ import {
 } from '@nestjs/swagger';
 import { EntitiesService } from './entities.service';
 import { CreateEntityDto } from './dto/create-entity.dto';
-import { TrustEntityStatus, TrustEntityType } from './entity.entity';
+import { TrustEntityStatus, TrustEntityType } from './types';
 
 @ApiTags('Entity Management')
 @Controller('entities')

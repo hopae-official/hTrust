@@ -1,5 +1,11 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsObject, IsString, IsUrl, ValidateIf } from 'class-validator';
+import {
+  IsOptional,
+  IsObject,
+  IsString,
+  IsUrl,
+  ValidateIf,
+} from 'class-validator';
 
 export class UpdateEntityDto {
   @ApiPropertyOptional({
@@ -21,13 +27,15 @@ export class UpdateEntityDto {
 
   @ApiPropertyOptional({
     description: 'JWKS JSON directly',
-    example: { 
-      keys: [{
-        kty: 'RSA',
-        kid: 'updated-key-1',
-        use: 'sig',
-        alg: 'RS256'
-      }]
+    example: {
+      keys: [
+        {
+          kty: 'RSA',
+          kid: 'updated-key-1',
+          use: 'sig',
+          alg: 'RS256',
+        },
+      ],
     },
   })
   @IsOptional()
@@ -38,8 +46,9 @@ export class UpdateEntityDto {
   @ApiPropertyOptional({
     description: 'API endpoints',
     example: {
-      'openid-configuration': 'https://example.com/.well-known/openid-configuration',
-      'authorization_endpoint': 'https://example.com/auth',
+      'openid-configuration':
+        'https://example.com/.well-known/openid-configuration',
+      authorization_endpoint: 'https://example.com/auth',
     },
   })
   @IsOptional()
@@ -48,10 +57,10 @@ export class UpdateEntityDto {
 
   @ApiPropertyOptional({
     description: 'Trust policy',
-    example: { 
+    example: {
       trust_framework: 'openid-federation',
       sandbox_mode: false,
-      compliance_level: 'high'
+      compliance_level: 'high',
     },
   })
   @IsOptional()

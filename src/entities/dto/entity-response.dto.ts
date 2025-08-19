@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { TrustEntityType } from '../entity.entity';
+import { TrustEntityType } from '../types';
 
 export class EntityResponseDto {
   @ApiProperty({ description: 'Entity ID' })

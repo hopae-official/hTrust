@@ -8,7 +8,7 @@ import {
   IsNotEmpty,
   ValidateIf,
 } from 'class-validator';
-import { TrustEntityType } from '../entity.entity';
+import { TrustEntityType } from '../types';
 
 export class CreateEntityDto {
   @ApiProperty({

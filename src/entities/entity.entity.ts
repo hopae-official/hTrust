@@ -6,7 +6,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
-import { TrustEntityType, TrustEntityStatus } from './types';
+import { TrustEntityType, TrustEntityStatus } from '@/entities/types';
 
 @Entity('trust_entities')
 export class TrustEntity {

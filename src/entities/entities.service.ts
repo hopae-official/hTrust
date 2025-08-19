@@ -6,15 +6,11 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import {
-  TrustEntity,
-  TrustEntityStatus,
-  TrustEntityType,
-} from './entity.entity';
+import { TrustEntity } from './entity.entity';
 import { CreateEntityDto } from './dto/create-entity.dto';
 import { UpdateEntityDto } from './dto/update-entity.dto';
+import { TrustEntityStatus, TrustEntityType } from './types';
 
-// JWKS interface for proper typing
 interface JWKS {
   keys: Array<{
     kty: string;
