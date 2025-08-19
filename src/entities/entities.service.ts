@@ -41,7 +41,7 @@ export class EntitiesService {
     const { entityType, name, jwksUri, jwks, endpoints, policy } =
       createEntityDto;
 
-    this.validateRequiredFields(createEntityDto);
+    this.validateRequiredFields(jwksUri, jwks);
     await this.checkDuplicates(jwksUri, name);
 
     const entity = this.entityRepository.create({
@@ -107,14 +107,14 @@ export class EntitiesService {
     return entity;
   }
 
-  private validateRequiredFields(dto: CreateEntityDto): void {
-    if (!dto.jwksUri && !dto.jwks) {
+  private validateRequiredFields(jwksUri?: string, jwks?: object): void {
+    if (!jwksUri && !jwks) {
       throw new BadRequestException('Either jwksUri or jwks must be provided');
     }
 
-    if (dto.jwks) {
-      const jwks = dto.jwks as JWKS;
-      if (!jwks.keys || !Array.isArray(jwks.keys)) {
+    if (jwks) {
+      const jwksTyped = jwks as JWKS;
+      if (!jwksTyped.keys || !Array.isArray(jwksTyped.keys)) {
         throw new BadRequestException('JWKS must contain a valid keys array');
       }
     }
