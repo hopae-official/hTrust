@@ -55,17 +55,17 @@ export class EntitiesService {
   }
 
   async update(
-    id: string,
+    entityId: string,
     updateEntityDto: UpdateEntityDto,
   ): Promise<TrustEntity> {
-    const entity = await this.findEntityById(id);
+    const entity = await this.findEntityByEntityId(entityId);
     Object.assign(entity, updateEntityDto);
     entity.tlVersion = await this.generateTlVersion();
     return this.entityRepository.save(entity);
   }
 
-  async revoke(id: string): Promise<TrustEntity> {
-    const entity = await this.findEntityById(id);
+  async revoke(entityId: string): Promise<TrustEntity> {
+    const entity = await this.findEntityByEntityId(entityId);
     entity.status = TrustEntityStatus.REVOKED;
     entity.tlVersion = await this.generateTlVersion();
     return this.entityRepository.save(entity);
@@ -77,8 +77,8 @@ export class EntitiesService {
     });
   }
 
-  async findOne(id: string): Promise<TrustEntity> {
-    return this.findEntityById(id);
+  async findOne(entityId: string): Promise<TrustEntity> {
+    return this.findEntityByEntityId(entityId);
   }
 
   async findByStatus(status: TrustEntityStatus): Promise<TrustEntity[]> {
@@ -95,10 +95,10 @@ export class EntitiesService {
     });
   }
 
-  private async findEntityById(id: string): Promise<TrustEntity> {
-    const entity = await this.entityRepository.findOne({ where: { id } });
+  private async findEntityByEntityId(entityId: string): Promise<TrustEntity> {
+    const entity = await this.entityRepository.findOne({ where: { entityId } });
     if (!entity) {
-      throw new NotFoundException(`Entity with ID ${id} not found`);
+      throw new NotFoundException(`Entity with ID ${entityId} not found`);
     }
     return entity;
   }

@@ -56,7 +56,7 @@ export class EntitiesController {
     const entity = await this.entitiesService.register(dto);
 
     return {
-      entity_id: entity.id,
+      entity_id: entity.entityId,
       status: entity.status,
       created_at: entity.createdAt,
       tl_version: entity.tlVersion,
@@ -114,7 +114,7 @@ export class EntitiesController {
   async revoke(@Param('id', ParseUUIDPipe) id: string) {
     const entity = await this.entitiesService.revoke(id);
     return {
-      entity_id: entity.id,
+      entity_id: entity.entityId,
       status: entity.status,
       updated_at: entity.updatedAt,
       tl_version: entity.tlVersion,

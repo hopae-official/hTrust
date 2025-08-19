@@ -4,15 +4,21 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
+  Generated,
 } from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
 import { TrustEntityType, TrustEntityStatus } from '@/entities/types';
 
 @Entity('trust_entities')
 export class TrustEntity {
-  @PrimaryGeneratedColumn('uuid')
-  @ApiProperty({ description: 'Entity ID' })
-  id: string;
+  @PrimaryGeneratedColumn()
+  @ApiProperty({ description: 'Auto-increment numeric ID' })
+  id: number;
+
+  @Column({ type: 'uuid' })
+  @Generated('uuid')
+  @ApiProperty({ description: 'Entity UUID' })
+  entityId: string;
 
   @Column({ type: 'varchar', length: 50 })
   @ApiProperty({ enum: TrustEntityType, description: 'Entity type' })
