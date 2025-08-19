@@ -11,5 +11,5 @@ export const createDatabaseConfig = (
   password: configService.get('MYSQL_PASSWORD'),
   database: configService.get('MYSQL_DATABASE'),
   autoLoadEntities: true,
-  synchronize: false,
+  synchronize: true,
 });

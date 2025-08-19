@@ -26,7 +26,7 @@ export class TrustEntity {
   @ApiProperty({ description: 'Entity ID' })
   id: string;
 
-  @Column({ type: 'enum', enum: TrustEntityType })
+  @Column({ type: 'varchar', length: 50 })
   @ApiProperty({ enum: TrustEntityType, description: 'Entity type' })
   entityType: TrustEntityType;
 
