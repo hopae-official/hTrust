@@ -15,7 +15,7 @@ export class TrustEntity {
   @ApiProperty({ description: 'Auto-increment numeric ID' })
   id: number;
 
-  @Column({ type: 'uuid' })
+  @Column({ type: 'varchar', unique: true })
   @Generated('uuid')
   @ApiProperty({ description: 'Entity UUID' })
   entityId: string;
